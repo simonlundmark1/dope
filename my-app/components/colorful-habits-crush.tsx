@@ -5,7 +5,7 @@ import { css, keyframes } from '@emotion/react';
 import Image from 'next/image';
 import explosionGif from '../assets/explosion.gif'; // Ensure this path is correct
 import starImage from '../assets/star.png'; // Ensure this path is correct
-import blackStarImage from '../assets/blackStar.png'; // Ensure this path is correct
+import blackStarImage from '../assets/blackstar.png'; // Ensure this path is correct
 import benderImage from '../assets/Bender.png'; // Ensure this path is correct
 
 // Importing additional icons
