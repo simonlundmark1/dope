@@ -950,13 +950,20 @@ Please provide any boosts or adjustments for this new level based on the player'
 
   // Initialize OpenAI client
   useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('OpenAI API Key is not defined!');
+      return;
+    }
+
     const openaiClient = new OpenAI({
-      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
-      dangerouslyAllowBrowser: true,
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true, // Allows usage in the browser
     });
+
     setOpenai(openaiClient);
   }, []);
-
+  
   const addFlyingStars = (row: number, col: number) => {
     if (!gridRef.current) return;
 
