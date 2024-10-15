@@ -951,7 +951,7 @@ Please provide any boosts or adjustments for this new level based on the player'
   // Initialize OpenAI client
   useEffect(() => {
     const openaiClient = new OpenAI({
-      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
+      apiKey: process.env.OPENAI_API_KEY!,
       dangerouslyAllowBrowser: true,
     });
     setOpenai(openaiClient);
