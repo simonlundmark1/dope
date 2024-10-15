@@ -950,20 +950,14 @@ Please provide any boosts or adjustments for this new level based on the player'
 
   // Initialize OpenAI client
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-    if (!apiKey) {
-      console.error('OpenAI API Key is not defined!');
-      return;
-    }
-
     const openaiClient = new OpenAI({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true, // Allows usage in the browser
+      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY!,
+      dangerouslyAllowBrowser: true,
     });
-
     setOpenai(openaiClient);
   }, []);
-  
+
+
   const addFlyingStars = (row: number, col: number) => {
     if (!gridRef.current) return;
 
@@ -1375,14 +1369,16 @@ Please provide any boosts or adjustments for this new level based on the player'
         style={{
           bottom: '2vh',
           right: '12vw',
+          width: '18vw',  // Set a fixed width
+      
         }}
       >
         <Image
           src={benderImage}
           alt="Bender"
-          width={350}
-          height={350}
-          style={{ height: 'auto', width: '100%' }}
+          width={750}
+          height={750}
+          style={{ height: 'auto', width: '220%' }}
         />
       </div>
 
