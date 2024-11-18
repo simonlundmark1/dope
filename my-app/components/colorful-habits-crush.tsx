@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { css, keyframes } from '@emotion/react';
 import Image from 'next/image';
-import explosionGif from '../assets/explosion.gif'; // Ensure this path is correct
-import starImage from '../assets/star.png'; // Ensure this path is correct
-import blackStarImage from '../assets/blackstar.png'; // Ensure this path is correct
-import benderImage from '../assets/Bender.png'; // Ensure this path is correct
+import explosionGif from '../assets/xplode.webp';
+import starImage from '../assets/star.png';
+import blackStarImage from '../assets/blackstar.png';
+import benderImage from '../assets/Bender.png';
 
 // Importing additional icons
 import {
@@ -21,7 +21,11 @@ import {
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import OpenAI from 'openai'; // Import OpenAI
+import OpenAI from 'openai';
+
+// Import Roboto font
+import { Roboto } from 'next/font/google';
+const roboto = Roboto({ subsets: ['latin'], weight: ['400', '700'] });
 
 // Updated ICONS array with more icons
 const ICONS = [
@@ -51,32 +55,40 @@ const ICON_COLORS = [
 const COST_INPUT_PER_1000_TOKENS = 0.0015;
 const COST_OUTPUT_PER_1000_TOKENS = 0.002;
 
-const LEVEL_SCORE = 1200;
+const winningPhrases = [
+  'Dopamine Rush!',
+  'Euphoria!',
+  'High Score High!',
+  'Craving Crushed!',
+];
+
+let uniqueIdCounter = 0; // Unique ID counter
 
 export function ColorfulHabitsCrush() {
   const [board, setBoard] = useState<(string | null)[][]>([]);
   const [selectedIcon, setSelectedIcon] = useState<[number, number] | null>(null);
   const [score, setScore] = useState(0);
   const [moves, setMoves] = useState(10);
-  const [initialMoves, setInitialMoves] = useState(10); // New state to track initial moves
+  const [initialMoves, setInitialMoves] = useState(10);
   const [level, setLevel] = useState(1);
-  const [targetScore, setTargetScore] = useState(1000);  // Changed initial value to 1000
-  const [timeLeft, setTimeLeft] = useState(60); // Time limit
+  const [targetScore, setTargetScore] = useState(1000);
+  const [timeLeft, setTimeLeft] = useState(60);
   const [gameOver, setGameOver] = useState(false);
   const [winPopup, setWinPopup] = useState(false);
   const [matches, setMatches] = useState<{ row: number; col: number }[]>([]);
   const [animatingSwap, setAnimatingSwap] =
     useState<[number, number, number, number] | null>(null);
   const [newTiles, setNewTiles] = useState<{ [key: string]: boolean }>({});
-  const [maxDraws, setMaxDraws] = useState(10); // Limit draws
-  const [flyingStars, setFlyingStars] = useState<{ id: number; style: any }[]>([]);
+  const [flyingStars, setFlyingStars] = useState<
+    { id: number; style: any; duration: number }[]
+  >([]);
   const gridRef = useRef<HTMLDivElement>(null);
   const [starRating, setStarRating] = useState(0);
   const [winningPhrase, setWinningPhrase] = useState('');
   const [specialTiles, setSpecialTiles] = useState<
     { row: number; col: number; type: string }[]
   >([]);
-  const [obstaclesEnabled, setObstaclesEnabled] = useState(false); // New mechanic
+  const [bigText, setBigText] = useState<string | null>(null);
 
   // Add new state variables
   const [aiDifficulty, setAiDifficulty] = useState(2);
@@ -139,16 +151,11 @@ export function ColorfulHabitsCrush() {
   const [latestAIPrompt, setLatestAIPrompt] = useState('');
 
   const [showAIInfo, setShowAIInfo] = useState(true);
-  const [activeAITab, setActiveAITab] = useState<'prompt' | 'stats'>('prompt');
 
-  const [floatingScores, setFloatingScores] = useState<{ id: number; x: number; y: number; score: number }[]>([]);
+  const [floatingScores, setFloatingScores] = useState<
+    { id: number; x: number; y: number; score: number }[]
+  >([]);
 
-  const winningPhrases = [
-    'Dopamine Rush!',
-    'Euphoria!',
-    'High Score High!',
-    'Craving Crushed!',
-  ];
   const starFlyOut = keyframes`
     0% {
       transform: translate(0, 0) scale(1);
@@ -241,9 +248,12 @@ export function ColorfulHabitsCrush() {
     setBoard(newBoard);
   };
 
+  // New state to track if the user has interacted
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
+
   const playSound = useCallback(
     (sound: HTMLAudioElement | null) => {
-      if (isSoundEnabled && sound) {
+      if (isSoundEnabled && sound && userHasInteracted) {
         sound.currentTime = 0;
         sound
           .play()
@@ -255,7 +265,7 @@ export function ColorfulHabitsCrush() {
           });
       }
     },
-    [isSoundEnabled]
+    [isSoundEnabled, userHasInteracted]
   );
 
   const clearMatches = useCallback(
@@ -306,45 +316,43 @@ export function ColorfulHabitsCrush() {
     setTimeout(() => setNewTiles({}), 500);
   }, [board]);
 
-  const [bigText, setBigText] = useState<string | null>(null);
-
   const excitingPhrases = [
-    "SUPER!",
-    "AWESOME!",
-    "EXTREME!",
-    "INCREDIBLE!",
-    "PHENOMENAL!",
-    "MIND-BLOWING!",
-    "LEGENDARY!",
-    "GODLIKE!"
+    'SUPER!',
+    'AWESOME!',
+    'EXTREME!',
+    'INCREDIBLE!',
+    'PHENOMENAL!',
+    'MIND-BLOWING!',
+    'LEGENDARY!',
+    'GODLIKE!',
   ];
 
   const updateScore = (matchCount: number) => {
     let baseScore = matchCount * 10;
     let bonus = 0;
-    
+
     // Calculate bonus for matches larger than 3
     if (matchCount > 3) {
       bonus = (matchCount - 3) * 20; // 20 points extra for each tile beyond 3
     }
-    
+
     const totalScore = baseScore + bonus;
     setScore((prevScore) => prevScore + totalScore);
-    
+
     // Display big text for large matches
     if (matchCount >= 7 && !bigText) {
       const phraseIndex = Math.min(matchCount - 7, excitingPhrases.length - 1);
       setBigText(excitingPhrases[phraseIndex]);
       setTimeout(() => setBigText(null), 500); // Total duration of 1 second
     }
-    
+
     // Add floating scores for each matched tile
     const scorePerTile = Math.round(totalScore / matchCount);
     const newFloatingScores = matches.map(({ row, col }) => {
       const tileElement = gridRef.current?.children[row * 8 + col] as HTMLElement;
       const tileRect = tileElement?.getBoundingClientRect();
       return {
-        id: Date.now() + Math.random(),
+        id: uniqueIdCounter++,
         x: tileRect ? tileRect.left + tileRect.width / 2 : 0,
         y: tileRect ? tileRect.top + tileRect.height / 2 : 0,
         score: scorePerTile,
@@ -368,7 +376,7 @@ export function ColorfulHabitsCrush() {
 
   useEffect(() => {
     initializeBoard();
-  }, []); // Empty dependency array to run only once
+  }, []);
 
   const checkForMatches = useCallback(() => {
     if (board.length === 0) return;
@@ -434,7 +442,7 @@ export function ColorfulHabitsCrush() {
 
     setMatches(newMatches);
     setSpecialTiles(newSpecialTiles);
-  }, [board, specialTileChance]); // Add specialTileChance to dependencies
+  }, [board, specialTileChance]);
 
   useEffect(() => {
     if (board.length > 0) {
@@ -583,7 +591,15 @@ export function ColorfulHabitsCrush() {
       // Provide AI commentary
       setAiCommentary("Here's a little boost to help you out!");
     }
-  }, [initialMoves, moves, score, targetScore, setSpecialTileChance, addSpecialTileToBoard, setAiCommentary]);
+  }, [
+    initialMoves,
+    moves,
+    score,
+    targetScore,
+    setSpecialTileChance,
+    addSpecialTileToBoard,
+    setAiCommentary,
+  ]);
 
   const handleSwap = useCallback(
     (row1: number, col1: number, row2: number, col2: number) => {
@@ -692,7 +708,7 @@ Given the player's performance, score, moves left, and current board state, shou
       console.log('Tokens used:', response.usage?.total_tokens);
 
       // Update API call stats
-      setApiCallStats(prevStats => ({
+      setApiCallStats((prevStats) => ({
         totalCalls: prevStats.totalCalls + 1,
         totalTokens: prevStats.totalTokens + (response.usage?.total_tokens || 0),
       }));
@@ -708,12 +724,12 @@ Given the player's performance, score, moves left, and current board state, shou
         if (boostDecision === 'yes') {
           // Apply boosts
           if (aiDecision.toLowerCase().includes('extra move')) {
-            setMoves(moves => moves + 1);
-            setAiCommentary('Here\'s an extra move to help you out!');
+            setMoves((moves) => moves + 1);
+            setAiCommentary("Here's an extra move to help you out!");
           } else if (aiDecision.toLowerCase().includes('bonus tile')) {
             setSpecialTileChance((prev) => Math.min(prev + 0.2, 0.7)); // Increase special tile chance
             addSpecialTileToBoard(); // Add a special tile to the board
-            setAiCommentary('I\'ve added a bonus special tile to the board!');
+            setAiCommentary("I've added a bonus special tile to the board!");
           } else {
             setSpecialTileChance((prev) => Math.min(prev + 0.2, 0.7)); // Increase special tile chance
             addSpecialTileToBoard(); // Add a special tile to the board
@@ -751,36 +767,42 @@ Given the player's performance, score, moves left, and current board state, shou
     addSpecialTileToBoard,
   ]);
 
-  const applyBoosts = useCallback((boosts: string[]) => {
-    boosts.forEach((boost) => {
-      if (boost.toLowerCase().includes('increase special tile chance')) {
-        setSpecialTileChance((prev) => Math.min(prev + 0.05, 0.5)); // Smaller increase
-      } else if (boost.toLowerCase().includes('add special tile')) {
-        // 50% chance to actually add a special tile
-        if (Math.random() < 0.5) {
-          addSpecialTileToBoard();
+  const applyBoosts = useCallback(
+    (boosts: string[]) => {
+      boosts.forEach((boost) => {
+        if (boost.toLowerCase().includes('increase special tile chance')) {
+          setSpecialTileChance((prev) => Math.min(prev + 0.05, 0.5)); // Smaller increase
+        } else if (boost.toLowerCase().includes('add special tile')) {
+          // 50% chance to actually add a special tile
+          if (Math.random() < 0.5) {
+            addSpecialTileToBoard();
+          }
+        } else if (boost.toLowerCase().includes('extra time') && useTimer) {
+          setTimeLeft((prev) => prev + 15); // Reduced extra time
         }
-      } else if (boost.toLowerCase().includes('extra time') && useTimer) {
-        setTimeLeft((prev) => prev + 15); // Reduced extra time
-      }
-    });
-  }, [setSpecialTileChance, addSpecialTileToBoard, setTimeLeft, useTimer]);
+      });
+    },
+    [setSpecialTileChance, addSpecialTileToBoard, setTimeLeft, useTimer]
+  );
 
-  const adjustGameDifficulty = useCallback((difficulty: number) => {
-    // Adjust icon count (more icons for higher difficulty, but less aggressively)
-    const baseIconCount = 4;
-    const maxIconCount = ICONS.length;
-    const iconIncrease = Math.floor(difficulty / 5); // Increase icons every 3 levels of difficulty
-    setIconCount(Math.min(baseIconCount + iconIncrease, maxIconCount));
+  const adjustGameDifficulty = useCallback(
+    (difficulty: number) => {
+      // Adjust icon count (more icons for higher difficulty, but less aggressively)
+      const baseIconCount = 4;
+      const maxIconCount = ICONS.length;
+      const iconIncrease = Math.floor(difficulty / 5); // Increase icons every 5 levels of difficulty
+      setIconCount(Math.min(baseIconCount + iconIncrease, maxIconCount));
 
-    // Adjust timer usage (only enable timer for higher difficulties)
-    setUseTimer(difficulty > 7);
+      // Adjust timer usage (only enable timer for higher difficulties)
+      setUseTimer(difficulty > 7);
 
-    // Adjust special tile creation chance (less aggressive reduction)
-    const baseChance = 0.2;
-    const chanceReduction = 0.01 * difficulty;
-    setSpecialTileChance(Math.max(0.05, baseChance - chanceReduction));
-  }, [setIconCount, setUseTimer, setSpecialTileChance]);
+      // Adjust special tile creation chance (less aggressive reduction)
+      const baseChance = 0.2;
+      const chanceReduction = 0.01 * difficulty;
+      setSpecialTileChance(Math.max(0.05, baseChance - chanceReduction));
+    },
+    [setIconCount, setUseTimer, setSpecialTileChance]
+  );
 
   const analyzePerformance = useCallback(async () => {
     if (!openai) return;
@@ -880,7 +902,7 @@ Please provide any boosts or adjustments for this new level based on the player'
 
     // Update level and target score first
     setLevel((prev) => prev + 1);
-    setTargetScore((prev) => Math.floor(prev * 1.15));  // Increase by 15% for all levels
+    setTargetScore((prev) => Math.floor(prev * 1.15)); // Increase by 15% for all levels
 
     // Then call analyzePerformance with the new values
     analyzePerformance();
@@ -957,7 +979,6 @@ Please provide any boosts or adjustments for this new level based on the player'
     setOpenai(openaiClient);
   }, []);
 
-
   const addFlyingStars = (row: number, col: number) => {
     if (!gridRef.current) return;
 
@@ -981,7 +1002,7 @@ Please provide any boosts or adjustments for this new level based on the player'
         const delay = 0.5; // Added delay
 
         return {
-          id: Date.now() + i + Math.random(),
+          id: uniqueIdCounter++,
           style: {
             position: 'fixed',
             top: `${y}px`,
@@ -1007,7 +1028,7 @@ Please provide any boosts or adjustments for this new level based on the player'
   // Add this useEffect to handle the ticking sound
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (useTimer && timeLeft > 0) {
+    if (userHasInteracted && useTimer && timeLeft > 0) {
       if (timeLeft === 60) {
         playSound(tickSound);
       }
@@ -1016,7 +1037,7 @@ Please provide any boosts or adjustments for this new level based on the player'
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [useTimer, timeLeft, playSound, tickSound]);
+  }, [userHasInteracted, useTimer, timeLeft, playSound, tickSound]);
 
   // Move calculateCost inside the component
   const calculateCost = useCallback((tokens: number) => {
@@ -1027,8 +1048,97 @@ Please provide any boosts or adjustments for this new level based on the player'
     return inputCost + outputCost;
   }, []);
 
+  // New states and refs for client-only rendering
+  const [isMounted, setIsMounted] = useState(false);
+  const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [volume, setVolume] = useState(1); // New state for volume
+
+  // Initialize backgroundMusic in useEffect
+  useEffect(() => {
+    setIsMounted(true);
+    if (typeof Audio !== 'undefined') {
+      const audio = new Audio('/sounds/zoolook.mp3');
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.volume = volume; // Set initial volume
+      backgroundMusicRef.current = audio;
+    }
+
+    return () => {
+      if (backgroundMusicRef.current) {
+        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.currentTime = 0;
+      }
+    };
+  }, []);
+
+  // Handle background music play/pause based on game state
+  useEffect(() => {
+    if (backgroundMusicRef.current) {
+      if (isGameStarted) {
+        backgroundMusicRef.current
+          .play()
+          .then(() => {
+            console.log('Background music played successfully');
+          })
+          .catch((error) => {
+            console.error('Error playing background music:', error);
+          });
+      } else {
+        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.currentTime = 0;
+      }
+    }
+  }, [isGameStarted]);
+
+  // Update background music volume when volume state changes
+  useEffect(() => {
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.volume = volume;
+    }
+  }, [volume]);
+
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen bg-[#F4CA19] pt-4 relative overflow-hidden">
+    <div
+      className={`${roboto.className} flex flex-col items-center justify-start min-h-screen bg-[#F4CA19] pt-4 relative overflow-hidden`}
+    >
+      {!isGameStarted ? (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80"
+          style={{ zIndex: 9999 }}
+        >
+          <div className="mb-8">
+            <Image
+              src="/images/dope.png"
+              alt="Dope Crash Logo"
+              width={800}
+              height={100}
+              style={{ height: 'auto', width: '100%' }}
+              priority
+            />
+          </div>
+          <button
+            onClick={() => {
+              setIsGameStarted(true);
+              setUserHasInteracted(true); // Set user interaction to true
+              if (backgroundMusicRef.current) {
+                backgroundMusicRef.current
+                  .play()
+                  .then(() => {
+                    console.log('Background music played successfully');
+                  })
+                  .catch((error) => {
+                    console.error('Error playing background music:', error);
+                  });
+              }
+            }}
+            className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 px-8 rounded-full text-2xl transform hover:scale-110 transition-all duration-200 shadow-lg -mt-5"
+          >
+            START GAME
+          </button>
+        </div>
+      ) : null}
       {winPopup && (
         <div
           css={styles.funkyPopup}
@@ -1110,7 +1220,7 @@ Please provide any boosts or adjustments for this new level based on the player'
             >
               <path
                 d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
-                        10-4.48 10-10S17.52 2 12 2zm5 13H7v-2h10v2z"
+                            10-4.48 10-10S17.52 2 12 2zm5 13H7v-2h10v2z"
               ></path>
             </svg>
           </button>
@@ -1265,12 +1375,12 @@ Please provide any boosts or adjustments for this new level based on the player'
             initial={{ opacity: 1, y: 0, scale: 1 }}
             animate={{ opacity: 0, y: -100, scale: 1.5 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 2, ease: "easeOut" }}
+            transition={{ duration: 2, ease: 'easeOut' }}
             className="absolute text-white font-bold text-4xl z-50 pointer-events-none"
-            style={{ 
-              left: fs.x, 
+            style={{
+              left: fs.x,
               top: fs.y,
-              textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
+              textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
             }}
           >
             +{fs.score}
@@ -1285,14 +1395,14 @@ Please provide any boosts or adjustments for this new level based on the player'
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
             className="absolute text-8xl font-black text-yellow-300 z-50 text-center"
-            style={{ 
+            style={{
               WebkitTextStroke: '4px black',
               position: 'absolute',
               top: '50%',
               left: 'calc(50% - 10vw)',
-              transform: 'translate(-50%, -50%)'
+              transform: 'translate(-50%, -50%)',
             }}
           >
             {bigText}
@@ -1302,26 +1412,23 @@ Please provide any boosts or adjustments for this new level based on the player'
 
       {/* Combined AI Information Box */}
       <div
-        className={`absolute bg-white bg-opacity-90 p-4 rounded-lg shadow-lg z-10 transition-all duration-300 ease-in-out ${
-          showAIInfo ? 'left-2' : '-left-80'
-        }`}
+        className={`absolute bg-white bg-opacity-90 p-4 rounded-lg shadow-lg z-10 transition-all duration-300 ease-in-out`}
         style={{
+          left: showAIInfo ? '10px' : '-290px',
           top: '10vh',
           maxWidth: '300px',
           maxHeight: '80vh',
         }}
       >
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-xl font-bold">AI Information</h2>
-          <button
-            onClick={() => setShowAIInfo(!showAIInfo)}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            {showAIInfo ? '◀' : '▶'}
-          </button>
-        </div>
-
+        <button
+          onClick={() => setShowAIInfo(!showAIInfo)}
+          className="absolute top-2 right-[-20px] bg-white rounded-full p-2 shadow-lg"
+        >
+          {showAIInfo ? '◀' : '▶'}
+        </button>
         <div className="overflow-auto" style={{ maxHeight: 'calc(80vh - 100px)' }}>
+          <h2 className="text-xl font-bold">AI Information</h2>
+
           <h3 className="text-lg font-semibold mb-2">Prompt</h3>
           <pre className="text-xs whitespace-pre-wrap mb-4">{latestAIPrompt}</pre>
 
@@ -1330,14 +1437,13 @@ Please provide any boosts or adjustments for this new level based on the player'
             <p>Total Calls: {apiCallStats.totalCalls}</p>
             <p>Total Tokens Used: {apiCallStats.totalTokens}</p>
             <p>
-              Total Cost: $
-              {calculateCost(apiCallStats.totalTokens).toFixed(4)} USD
+              Total Cost: ${calculateCost(apiCallStats.totalTokens).toFixed(4)} USD
             </p>
           </div>
         </div>
       </div>
 
-      {/* AI Commentary (unchanged position) */}
+      {/* AI Commentary */}
       <div
         className="absolute bg-white bg-opacity-90 p-4 rounded-lg shadow-lg z-10"
         style={{
@@ -1369,8 +1475,7 @@ Please provide any boosts or adjustments for this new level based on the player'
         style={{
           bottom: '2vh',
           right: '12vw',
-          width: '18vw',  // Set a fixed width
-      
+          width: '18vw',
         }}
       >
         <Image
@@ -1383,12 +1488,28 @@ Please provide any boosts or adjustments for this new level based on the player'
       </div>
 
       {/* Sound Toggle Button */}
-      <button
-        className="bg-yellow-500 text-white p-2 rounded-full"
-        onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-      >
-        {isSoundEnabled ? '🔊' : '🔇'}
-      </button>
+      <div className="fixed bottom-4 right-4 flex gap-2 items-center">
+        <button
+          className="bg-yellow-500 text-white p-2 rounded-full"
+          onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+        >
+          {isSoundEnabled ? '🔊' : '🔇'}
+        </button>
+        {isMounted && backgroundMusicRef.current && (
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={volume}
+            onChange={(e) => {
+              const newVolume = parseFloat(e.target.value);
+              setVolume(newVolume);
+            }}
+            className="w-24 h-8"
+          />
+        )}
+      </div>
     </div>
   );
 }
